@@ -1,25 +1,38 @@
 <?php
 
-// 1. PAKSA PHP pindah ke folder utama (Root), bukan di dalam folder api! (Krusial Banget)
+// 1. Paksa PHP pindah ke root directory
 chdir(__DIR__ . '/../');
 
-// 2. Manipulasi server variable agar Laravel mengira dia berjalan normal dari public/index.php
-$_SERVER['SCRIPT_NAME'] = '/index.php';
-$_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/../public/index.php';
+require __DIR__ . '/../vendor/autoload.php';
+$app = require_once __DIR__ . '/../bootstrap/app.php';
 
-// 3. Amankan folder temporary untuk cache & session di Vercel (Bypass Read-Only)
-$writableFolders = [
-    '/tmp/storage/framework/views',
-    '/tmp/storage/framework/cache',
-    '/tmp/storage/framework/sessions',
-    '/tmp/storage/logs'
-];
-
-foreach ($writableFolders as $folder) {
-    if (!is_dir($folder)) {
-        mkdir($folder, 0777, true);
+// 🔥 BAJAK EXCEPTION HANDLER LARAVEL
+$app->singleton(
+    Illuminate\Contracts\Debug\ExceptionHandler::class,
+    new class implements Illuminate\Contracts\Debug\ExceptionHandler {
+        public function report(Throwable $e) {
+            error_log("KORBAN_ASLI: " . $e->getMessage());
+        }
+        public function shouldReport(Throwable $e) { return true; }
+        public function render($request, Throwable $e) {
+            header('Content-Type: text/html', true, 500);
+            echo "<div style='padding:20px; background:#fff5f5; color:#c53030; font-family:sans-serif;'>";
+            echo "<h1>🚨 BIANG KEROK ASLI KETEMU!</h1>";
+            echo "<h2>" . htmlspecialchars($e->getMessage()) . "</h2>";
+            echo "<p>Eror ini terjadi di file: <b>" . $e->getFile() . "</b> baris ke-<b>" . $e->getLine() . "</b></p>";
+            echo "<h3>Stack Trace:</h3>";
+            echo "<pre style='background:#fff; padding:10px; border:1px solid #feb2b2; overflow:auto;'>" . htmlspecialchars($e->getTraceAsString()) . "</pre>";
+            echo "</div>";
+            exit;
+        }
+        public function renderForConsole($output, Throwable $e) {}
     }
-}
+);
 
-// 4. Panggil index utama Laravel yang asli
-require __DIR__ . '/../public/index.php';
+// 2. Jalankan aplikasi Laravel
+$kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
+$response = $kernel->handle(
+    $request = Illuminate\Http\Request::capture()
+);
+$response->send();
+$kernel->terminate($request, $response);
