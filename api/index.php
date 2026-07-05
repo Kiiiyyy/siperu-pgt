@@ -6,13 +6,11 @@ chdir(__DIR__ . '/../');
 require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 
-// 🔥 BAJAK EXCEPTION HANDLER LARAVEL
-$app->singleton(
+// 🔥 BAJAK DENGAN AMAN: Menggunakan $app->instance agar lolos dari TypeError
+$app->instance(
     Illuminate\Contracts\Debug\ExceptionHandler::class,
     new class implements Illuminate\Contracts\Debug\ExceptionHandler {
-        public function report(Throwable $e) {
-            error_log("KORBAN_ASLI: " . $e->getMessage());
-        }
+        public function report(Throwable $e) {}
         public function shouldReport(Throwable $e) { return true; }
         public function render($request, Throwable $e) {
             header('Content-Type: text/html', true, 500);
