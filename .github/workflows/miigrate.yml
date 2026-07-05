@@ -1,0 +1,31 @@
+name: Run Laravel Migration to Supabase
+
+on:
+  workflow_dispatch: # Biar bisa kita klik manual tombol "Run" dari web GitHub
+
+jobs:
+  laravel-migration:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Setup PHP Engine
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: '8.3'
+        extensions: pdo, pdo_pgsql, pgsql # Server GitHub yang bakal install driver ini, bukan laptop lu!
+
+    - name: Install Composer Dependencies
+      run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
+
+    - name: Execute Artisan Migrate
+      env:
+        DB_CONNECTION: pgsql
+        DB_HOST: db.maxnxsxizgyemuhstyyv.supabase.co
+        DB_PORT: 5432
+        DB_DATABASE: postgres
+        DB_USERNAME: postgres
+        DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }} # Aman tertutup di rahasia GitHub
+      run: php artisan migrate --force
