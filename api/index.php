@@ -1,7 +1,22 @@
 <?php
 
-// 1. Paksa PHP pindah ke root directory
+// 1. Paksa PHP pindah ke root directory project
 chdir(__DIR__ . '/../');
+
+// 🔥 SUNTIKAN DIKTATOR: Alihkan semua cache resmi Laravel 12 ke /tmp secara total
+$cacheVars = [
+    'APP_SERVICES_CACHE' => '/tmp/storage/bootstrap/cache/services.php',
+    'APP_PACKAGES_CACHE' => '/tmp/storage/bootstrap/cache/packages.php',
+    'APP_CONFIG_CACHE'   => '/tmp/storage/framework/cache/config.php',
+    'APP_ROUTES_CACHE'   => '/tmp/storage/framework/cache/routes.php',
+    'APP_EVENTS_CACHE'   => '/tmp/storage/framework/cache/events.php',
+];
+
+foreach ($cacheVars as $key => $path) {
+    $_ENV[$key] = $path;
+    $_SERVER[$key] = $path;
+    putenv("{$key}={$path}");
+}
 
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/../public/index.php';
@@ -21,28 +36,11 @@ foreach ($writableFolders as $folder) {
     }
 }
 
-// 3. Panggil autoload dan app Laravel
+// 3. Panggil autoload dan bootstrapper Laravel
 require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 
-// 🔥 STRATEGI INJEKSI CONTAINER (Penjinak Core Laravel 12 di Vercel)
-// A. Pindahkan jalur bootstrap cache umum (untuk services.php, routes.php, dll)
-if (method_exists($app, 'useBootstrapCachePath')) {
-    $app->useBootstrapCachePath('/tmp/storage/bootstrap/cache');
-}
-
-// B. RE-BIND PACKAGE MANIFEST (Sangat Krusial!)
-// Kita timpa objek manifest lama dengan yang baru agar menulis aman ke /tmp
-$app->instance(
-    Illuminate\Foundation\PackageManifest::class,
-    new Illuminate\Foundation\PackageManifest(
-        new Illuminate\Filesystem\Filesystem,
-        $app->basePath(),
-        '/tmp/storage/bootstrap/cache/packages.php'
-    )
-);
-
-// C. TETAP PASANG MATA-MATA (Untuk memantau jika masih ada library dev lain yang rewel)
+// 4. TETAP PASANG MATA-MATA (Untuk memastikan gerbang akhir router aman)
 $app->instance(
     Illuminate\Contracts\Debug\ExceptionHandler::class,
     new class implements Illuminate\Contracts\Debug\ExceptionHandler {
@@ -63,7 +61,7 @@ $app->instance(
     }
 );
 
-// 4. Jalankan aplikasi Laravel
+// 5. Jalankan aplikasi Laravel
 $kernel = $app->make(Illuminate\Contracts\Http\Kernel::class);
 $response = $kernel->handle(
     $request = Illuminate\Http\Request::capture()
