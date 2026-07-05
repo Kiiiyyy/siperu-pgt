@@ -1,7 +1,7 @@
-name: Run Laravel Migration to Supabase
+name: Run Laravel Migration and Seed to Supabase
 
 on:
-  workflow_dispatch: # Biar bisa kita klik manual tombol "Run" dari web GitHub
+  workflow_dispatch: # Biar bisa di-klik manual dari web GitHub
 
 jobs:
   laravel-migration:
@@ -14,18 +14,19 @@ jobs:
     - name: Setup PHP Engine
       uses: shivammathur/setup-php@v2
       with:
-        php-version: '8.3'
-        extensions: pdo, pdo_pgsql, pgsql # Server GitHub yang bakal install driver ini, bukan laptop lu!
+        php-version: '8.4' # MATCH SINKRON: Di-bump ke 8.4 biar cocok sama composer.lock lu pak!
+        extensions: pdo, pdo_pgsql, pgsql
 
     - name: Install Composer Dependencies
       run: composer install --no-ansi --no-interaction --no-scripts --no-progress --prefer-dist
 
-    - name: Execute Artisan Migrate
+    - name: Execute Artisan Migrate & Seeder
       env:
         DB_CONNECTION: pgsql
         DB_HOST: db.maxnxsxizgyemuhstyyv.supabase.co
         DB_PORT: 5432
         DB_DATABASE: postgres
         DB_USERNAME: postgres
-        DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }} # Aman tertutup di rahasia GitHub
-      run: php artisan migrate --force
+        DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      # Tambahkan bumbu --seed di akhir perintah biar data master otomatis terisi
+      run: php artisan migrate --force --seed
