@@ -24,9 +24,9 @@ jobs:
       env:
         DB_CONNECTION: pgsql
         # MATCH SINKRON: Pake Host, Port, dan Username jalur Pooler Supabase pak!
-        DB_HOST: aws-0-ap-southeast-1.pooler.supabase.com # <--- Ganti sesuai dashboard lu
+        DB_HOST: aws-1-ap-southeast-1.pooler.supabase.com
         DB_PORT: 6543 # <--- Wajib 6543
         DB_DATABASE: postgres
-        DB_USERNAME: postgres.maxnxsxizgyemuhstyyv # <--- Ganti sesuai username pooler lu
+        DB_USERNAME: postgres.maxnxsxizgyemuhstyyv
         DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       run: php artisan migrate --force --seed
