@@ -3,14 +3,10 @@
 // 1. Paksa PHP pindah ke root directory
 chdir(__DIR__ . '/../');
 
-// 2. Amankan jalur bootstrap cache ke /tmp (Bypass Read-Only Vercel)
-$_ENV['APP_BOOTSTRAP_CACHE_PATH'] = '/tmp/storage/bootstrap/cache';
-putenv('APP_BOOTSTRAP_CACHE_PATH=/tmp/storage/bootstrap/cache');
-
 $_SERVER['SCRIPT_NAME'] = '/index.php';
 $_SERVER['SCRIPT_FILENAME'] = __DIR__ . '/../public/index.php';
 
-// 3. Pastikan folder temporary terbuat dengan hak akses penuh
+// 2. Pastikan seluruh folder temporary terbuat dengan hak akses penuh di /tmp
 $writableFolders = [
     '/tmp/storage/framework/views',
     '/tmp/storage/framework/cache',
@@ -25,10 +21,28 @@ foreach ($writableFolders as $folder) {
     }
 }
 
+// 3. Panggil autoload dan app Laravel
 require __DIR__ . '/../vendor/autoload.php';
 $app = require_once __DIR__ . '/../bootstrap/app.php';
 
-// 🔥 PASANG LAGI MATA-MATA (Pake $app->instance agar lolos validasi container Laravel 12)
+// 🔥 STRATEGI INJEKSI CONTAINER (Penjinak Core Laravel 12 di Vercel)
+// A. Pindahkan jalur bootstrap cache umum (untuk services.php, routes.php, dll)
+if (method_exists($app, 'useBootstrapCachePath')) {
+    $app->useBootstrapCachePath('/tmp/storage/bootstrap/cache');
+}
+
+// B. RE-BIND PACKAGE MANIFEST (Sangat Krusial!)
+// Kita timpa objek manifest lama dengan yang baru agar menulis aman ke /tmp
+$app->instance(
+    Illuminate\Foundation\PackageManifest::class,
+    new Illuminate\Foundation\PackageManifest(
+        new Illuminate\Filesystem\Filesystem,
+        $app->basePath(),
+        '/tmp/storage/bootstrap/cache/packages.php'
+    )
+);
+
+// C. TETAP PASANG MATA-MATA (Untuk memantau jika masih ada library dev lain yang rewel)
 $app->instance(
     Illuminate\Contracts\Debug\ExceptionHandler::class,
     new class implements Illuminate\Contracts\Debug\ExceptionHandler {
