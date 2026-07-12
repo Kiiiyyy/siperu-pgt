@@ -24,6 +24,12 @@
         @csrf
 
         <div class="space-y-4">
+            <!-- 🔥 FIELD BARU: Judul Pengajuan -->
+            <div>
+                <label for="judul_pengajuan" class="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2">Judul Agenda / Pengajuan Peminjaman</label>
+                <input type="text" name="judul_pengajuan" id="judul_pengajuan" value="{{ old('judul_pengajuan') }}" placeholder="Contoh: Sidang Pleno / Rapat Koordinasi UKM" required class="w-full text-xs px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-siperu-yellow">
+            </div>
+
             <div>
                 <label for="room_id" class="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2">Pilih Ruangan Kuliah</label>
                 <select name="room_id" id="room_id" required class="w-full text-xs px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-siperu-yellow">
@@ -53,9 +59,31 @@
 
         <div class="space-y-4 flex flex-col justify-between">
             <div class="space-y-4">
+                <!-- 🔥 FIELD BARU: Dropdown Pilih Dosen Terkait -->
+                <div>
+                    <label for="lecturer_id" class="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2">Dosen Terkait / Pembina</label>
+                    <select name="lecturer_id" id="lecturer_id" required class="w-full text-xs px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-siperu-yellow">
+                        <option value="">-- Pilih Dosen Penanggung Jawab --</option>
+                        @foreach($lecturers as $lecturer)
+                            <option value="{{ $lecturer->id }}" {{ old('lecturer_id') == $lecturer->id ? 'selected' : '' }}>{{ $lecturer->nama }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
+                <!-- 🔥 FIELD BARU: Dropdown Pilih Approval Admin -->
+                <div>
+                    <label for="approval_admin_id" class="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2">Approval Admin (Wewenang Ruangan)</label>
+                    <select name="approval_admin_id" id="approval_admin_id" required class="w-full text-xs px-3 py-2.5 bg-gray-50 border border-purple-200 rounded-xl focus:outline-none focus:border-siperu-yellow bg-purple-50/30">
+                        <option value="">-- Pilih Dosen Pemberi Izin Ruangan --</option>
+                        @foreach($approvalAdmins as $aa)
+                            <option value="{{ $aa->id }}" {{ old('approval_admin_id') == $aa->id ? 'selected' : '' }}>{{ $aa->nama }}</option>
+                        @endforeach
+                    </select>
+                </div>
+
                 <div>
                     <label for="nomor_whatsapp" class="block text-[11px] font-bold text-gray-600 uppercase tracking-wider mb-2">No. WhatsApp Aktif (Untuk Notifikasi)</label>
-                    <input type="text" name="nomor_whatsapp" id="nomor_whatsapp" value="{{ old('nomor_whatsapp') }}" placeholder="Contoh: 08123456789" required class="w-full text-xs px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-siperu-yellow">
+                    <input type="text" name="nomor_whatsapp" id="nomor_whatsapp" value="{{ old('nomor_whatsapp') }}" placeholder="Contoh: 628123456789" required class="w-full text-xs px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:outline-none focus:border-siperu-yellow">
                 </div>
 
                 <div>

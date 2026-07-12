@@ -10,7 +10,6 @@ use Illuminate\Support\Facades\Auth;
 
 class MasterController extends Controller
 {
-    // Helper privat pembatas hak akses agar sesuai arsitektur Laravel 12
     private function ensureIsAdmin()
     {
         if (Auth::user()->role !== 'admin') {
@@ -18,10 +17,9 @@ class MasterController extends Controller
         }
     }
 
-    // 1. Menampilkan Halaman Utama Data Master
     public function index(Request $request)
     {
-        $this->ensureIsAdmin(); // Kunci pengaman aktif
+        $this->ensureIsAdmin();
 
         $category = $request->get('category', 'ruangan');
         $rooms = Room::orderBy('nama_ruangan', 'asc')->get();
@@ -40,14 +38,14 @@ class MasterController extends Controller
     }
 
     // ==================== CRUD DATA RUANGAN ====================
-    
+
     public function storeRoom(Request $request)
     {
         $this->ensureIsAdmin();
         $request->validate([
             'nama_ruangan' => 'required|string|max:255',
             'kapasitas' => 'required|numeric|min:1',
-            'status' => 'required|in:Tersedia,Digunakan,Perbaikan',
+            'status' => 'required|in:Tersedia,Perbaikan', // 🔥 Hapus 'Digunakan'
         ]);
         Room::create($request->all());
         return redirect('/admin/master?category=ruangan')->with('success', 'Data Ruangan berhasil ditambahkan!');
@@ -59,7 +57,7 @@ class MasterController extends Controller
         $request->validate([
             'nama_ruangan' => 'required|string|max:255',
             'kapasitas' => 'required|numeric|min:1',
-            'status' => 'required|in:Tersedia,Digunakan,Perbaikan',
+            'status' => 'required|in:Tersedia,Perbaikan', // 🔥 Hapus 'Digunakan'
         ]);
         $room = Room::findOrFail($id);
         $room->update($request->all());
@@ -82,19 +80,27 @@ class MasterController extends Controller
         $request->validate([
             'nim' => 'required|string|unique:users,nim',
             'nama' => 'required|string|max:255',
-            'jurusan' => 'required|string',
+            'jurusan' => 'required_if:role,mahasiswa|nullable|string',
             'kelas' => 'required|string',
             'password' => 'required|string|min:4',
-            'role' => 'required|in:admin,dosen,mahasiswa',
+            'role' => 'required|in:admin,dosen,mahasiswa', // Balik ke 3 role utama
+            'no_hp' => ['required', 'regex:/^628[0-9]{8,12}$/'],
+        ], [
+            'no_hp.regex' => 'Format nomor handphone master wajib diawali dengan kode 628 (contoh: 6288213503918).',
         ]);
+
         User::create([
             'nim' => $request->nim,
             'nama' => $request->nama,
-            'jurusan' => $request->jurusan,
+            'jurusan' => $request->role === 'mahasiswa' ? $request->jurusan : null,
             'kelas' => $request->kelas,
             'password' => Hash::make($request->password),
             'role' => $request->role,
+            'no_hp' => $request->role === 'dosen' ? $request->no_hp : null,
+            // 🔥 Logika Extended Role: Jika dia dosen dan checkbox dicentang, set true (1)
+            'is_approval_admin' => ($request->role === 'dosen' && $request->has('is_approval_admin')) ? true : false,
         ]);
+
         return redirect('/admin/master?category=user')->with('success', 'Akun User baru berhasil didaftarkan!');
     }
 
@@ -104,21 +110,29 @@ class MasterController extends Controller
         $request->validate([
             'nim' => 'required|string|unique:users,nim,' . $id,
             'nama' => 'required|string|max:255',
-            'jurusan' => 'required|string',
-            'kelas' => 'required|string',
             'role' => 'required|in:admin,dosen,mahasiswa',
+            // 🔥 SUNTIK PADA KOLOM NO HP DATA MASTER USER
+            'no_hp' => ['required', 'regex:/^628[0-9]{8,12}$/'],
+        ], [
+            'no_hp.regex' => 'Format nomor handphone master wajib diawali dengan kode 628 (contoh: 6288213503918).',
         ]);
+
         $user = User::findOrFail($id);
         $data = [
             'nim' => $request->nim,
             'nama' => $request->nama,
-            'jurusan' => $request->jurusan,
+            'jurusan' => $request->role === 'mahasiswa' ? $request->jurusan : null,
             'kelas' => $request->kelas,
             'role' => $request->role,
+            'no_hp' => $request->role === 'dosen' ? $request->no_hp : null,
+            // 🔥 Logika Extended Role saat update
+            'is_approval_admin' => ($request->role === 'dosen' && $request->has('is_approval_admin')) ? true : false,
         ];
+
         if ($request->filled('password')) {
             $data['password'] = Hash::make($request->password);
         }
+
         $user->update($data);
         return redirect('/admin/master?category=user')->with('success', 'Data Akun User berhasil diperbarui!');
     }
