@@ -20,11 +20,13 @@ class User extends Authenticatable
      */
     protected $fillable = [
         'nim',
+        'no_hp',
         'nama',
         'jurusan',
         'kelas',
         'password',
         'role',
+        'is_approval_admin'
     ];
 
     // Relasi ke Reservation: 1 User bisa melakukan/memverifikasi banyak reservasi

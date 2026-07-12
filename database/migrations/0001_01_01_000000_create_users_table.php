@@ -15,7 +15,7 @@ return new class extends Migration
         $table->id();
         $table->string('nim')->unique(); // Menggantikan email untuk login
         $table->string('nama');
-        $table->string('jurusan');
+        $table->string('jurusan'); // Bisa null jika tidak diisi
         $table->string('kelas');
         $table->string('password');
         $table->enum('role', ['admin', 'dosen', 'mahasiswa']); // Sesuai Class Diagram
