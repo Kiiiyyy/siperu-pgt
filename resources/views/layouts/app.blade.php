@@ -45,7 +45,7 @@
                     @endif
 
                     <!-- ==================== MAHASISWA & DOSEN MULTIACCESS ==================== -->
-                    @if(Auth::user()->role == 'mahasiswa' || Auth::user()->role == 'dosen')
+                    @if(Auth::user()->role == 'mahasiswa')
                         <a href="{{ route('reservation.history') }}" 
                            class="flex items-center gap-3 px-4 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition duration-200 group {{ request()->routeIs('reservation.history') ? 'bg-siperu-blue text-white shadow-md shadow-siperu-blue/10' : 'text-siperu-blue hover:bg-white/20' }}">
                             <svg class="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
