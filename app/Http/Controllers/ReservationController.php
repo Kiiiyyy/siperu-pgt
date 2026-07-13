@@ -24,6 +24,7 @@ class ReservationController extends Controller
     }
 
     // Memproses Data Pengajuan (Case 4: Proteksi Jam Operasional)
+    // Memproses Data Pengajuan (Senin - Jumat)
     public function store(Request $request)
     {
         $request->validate([
@@ -34,33 +35,31 @@ class ReservationController extends Controller
             'waktu_selesai' => 'required|date_format:H:i|after:waktu_mulai',
             'lecturer_id' => 'required|exists:users,id',
             'approval_admin_id' => 'required|exists:users,id',
-            // 🔥 KUNCI REGEX: Wajib diawali 628 dan total panjang 11-15 digit
             'nomor_whatsapp' => ['required', 'regex:/^628[0-9]{8,12}$/'],
             'dokumen_proposal' => 'required|file|mimes:pdf|max:1024',
         ], [
             'dokumen_proposal.max' => 'Ukuran file proposal tidak boleh melebihi 1 Megabyte (1MB)!',
             'waktu_selesai.after' => 'Waktu selesai harus lebih lambat dari waktu mulai.',
-            // 🔥 PESAN ERROR KUSTOM
             'nomor_whatsapp.regex' => 'Format nomor WhatsApp tidak valid! Wajib diawali dengan kode negara 628 tanpa tanda + atau spasi (contoh: 6288213503918).',
         ]);
 
-        // 🔥 CASE 4: Validasi Strict Batasan Jam Operasional Kampus (Senin-Sabtu, 07:00 - 22:00)
-        $dayOfWeek = date('N', strtotime($request->tanggal)); // 1 (Senin) s/d 7 (Minggu)
-        if ($request->waktu_mulai < '07:00' || $request->waktu_selesai > '22:00' || $dayOfWeek == 7) {
+        // 🔥 FIX BUG: Mengunci hari kerja murni Senin s/d Jumat (Sabtu [6] dan Minggu [7] diblokir)
+        $dayOfWeek = date('N', strtotime($request->tanggal));
+        if ($request->waktu_mulai < '07:00' || $request->waktu_selesai > '22:00' || $dayOfWeek >= 6) {
             return back()->withErrors([
-                'jam_operasi' => '🚨 Izin ditolak! Peminjaman fasilitas kampus hanya diperbolehkan pada hari Senin s/d Sabtu pukul 07:00 s/d 22:00 WIB.'
+                'jam_operasi' => 'Izin ditolak! Peminjaman fasilitas kampus hanya diperbolehkan pada hari Senin s/d Jumat pukul 07:00 s/d 22:00 WIB.'
             ])->withInput();
         }
 
         $waktuMulaiFull = $request->tanggal . ' ' . $request->waktu_mulai . ':00';
         $waktuSelesaiFull = $request->tanggal . ' ' . $request->waktu_selesai . ':00';
 
-        // Validasi Kompetisi: Hanya dicekal jika menabrak jadwal yang sudah DIKUNCI
+        // Logika anti-tabrakan jadwal terkunci
         $jadwalBentrok = Reservation::where('room_id', $request->room_id)
             ->whereIn('status_izin', ['Disetujui Dosen', 'Disetujui'])
             ->where(function ($query) use ($waktuMulaiFull, $waktuSelesaiFull) {
                 $query->where('waktu_mulai', '<', $waktuSelesaiFull)
-                      ->where('waktu_selesai', '>', $waktuMulaiFull);
+                    ->where('waktu_selesai', '>', $waktuMulaiFull);
             })->exists();
 
         if ($jadwalBentrok) {
@@ -88,12 +87,10 @@ class ReservationController extends Controller
             'status_izin' => 'Pending',
         ]);
 
-        // Kirim WA Awal (Ditambahkan timeout 3 detik agar mencegah hang/freeze)
         try {
             $token = env('FONNTE_TOKEN');
-            $roomInfo = Room::find($request->room_id);
             $dosenTerkait = User::find($request->lecturer_id);
-            $pesan = "🚨 *NOTIFIKASI SIPERU PGT*\nHalo Bapak/Ibu, ada pengajuan izin ruangan baru dari Mahasiswa untuk agenda *\"{$request->judul_pengajuan}\"*. Mohon tinjau berkas di sistem.";
+            $pesan = "NOTIFIKASI SIPERU PGT\nHalo Bapak/Ibu, ada pengajuan izin ruangan baru dari Mahasiswa untuk agenda \"{$request->judul_pengajuan}\". Mohon tinjau berkas di sistem.";
 
             if ($dosenTerkait && $dosenTerkait->no_hp) {
                 Http::timeout(3)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
@@ -279,7 +276,7 @@ class ReservationController extends Controller
         // Kirim WA Notifikasi ke Mahasiswa Utama yang dibatalkan
         try {
             $pesanCancel = "⚠️ *PENGUMUMAN: REKOMENDASI DIATUR ULANG*\n\nHalo *{$reservation->user->nama}*,\n\nPengajuan peminjaman ruangan Anda untuk agenda *\"{$reservation->judul_pengajuan}\"* saat ini *DITARIK KEMBALI* oleh Dosen Pembina untuk penyesuaian ulang.\n\n📌 *Catatan/Alasan Dosen:* _\"{$request->alasan_ditarik}\"_\n\nStatus berkas Anda kembali menjadi *Pending Pembina*. Silakan periksa sistem SIPERU PGT.";
-            
+
             Http::timeout(3)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
                 'target' => $reservation->nomor_whatsapp,
                 'message' => $pesanCancel,
@@ -304,7 +301,7 @@ class ReservationController extends Controller
 
             // Kirim WA Kabar Gembira ke Mahasiswa saingan: "Lu masuk ring lagi pak!"
             $pesanResusitasi = "🔄 *NOTIFIKASI SIPERU PGT: BERKAS DIAKTIFKAN KEMBALI*\n\nHalo *{$saingan->user->nama}*,\n\nAda secercah harapan! Pengajuan ruangan Anda untuk agenda *\"{$saingan->judul_pengajuan}\"* di *{$reservation->room->nama_ruangan}* yang sebelumnya gugur akibat kalah cepat, saat ini telah *DIAKTIFKAN KEMBALI* menjadi *Pending Pembina*.\n\nSebab: Rekomendasi untuk kompetitor utama Anda baru saja ditarik kembali oleh Dosen Pembina, sehingga slot waktu terbuka kembali untuk diperebutkan.\n\nBerkas Anda kini masuk kembali ke antrean peninjauan dosen. Silakan pantau sistem secara berkala.";
-            
+
             try {
                 Http::timeout(3)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
                     'target' => $saingan->nomor_whatsapp,
@@ -364,6 +361,7 @@ class ReservationController extends Controller
     }
 
     // 10. Memproses Pembaruan Data (Dengan Validasi Ulang Anti-Tabrakan Kompetisi)
+    // Memproses Pembaruan Data (Dengan Validasi Ulang Senin - Jumat)
     public function update(Request $request, $id)
     {
         $reservation = Reservation::findOrFail($id);
@@ -380,24 +378,28 @@ class ReservationController extends Controller
             'waktu_selesai' => 'required|date_format:H:i|after:waktu_mulai',
             'lecturer_id' => 'required|exists:users,id',
             'approval_admin_id' => 'required|exists:users,id',
-            // 🔥 KUNCI REGEX UPDATE
             'nomor_whatsapp' => ['required', 'regex:/^628[0-9]{8,12}$/'],
         ], [
             'nomor_whatsapp.regex' => 'Format nomor WhatsApp tidak valid! Wajib diawali dengan kode negara 628 tanpa tanda + atau spasi (contoh: 6288213503918).',
         ]);
 
+        // 🔥 SINKRONISASI PROTEKSI: Kunci hari kerja di menu update (Blokir Sabtu & Minggu)
+        $dayOfWeek = date('N', strtotime($request->tanggal));
+        if ($request->waktu_mulai < '07:00' || $request->waktu_selesai > '22:00' || $dayOfWeek >= 6) {
+            return back()->withErrors([
+                'jam_operasi' => 'Izin ditolak! Peminjaman fasilitas kampus hanya diperbolehkan pada hari Senin s/d Jumat pukul 07:00 s/d 22:00 WIB.'
+            ])->withInput();
+        }
+
         $waktuMulaiFull = $request->tanggal . ' ' . $request->waktu_mulai . ':00';
         $waktuSelesaiFull = $request->tanggal . ' ' . $request->waktu_selesai . ':00';
 
-        // 🔥 REFACTOR: Saat mhs edit, pastikan dia tidak menabrak jadwal yang SUDAH DIKUNCI dosen lain
         $jadwalBentrok = Reservation::where('room_id', $request->room_id)
             ->where('id', '!=', $id)
             ->whereIn('status_izin', ['Disetujui Dosen', 'Disetujui'])
             ->where(function ($query) use ($waktuMulaiFull, $waktuSelesaiFull) {
-                $query->where(function ($q) use ($waktuMulaiFull, $waktuSelesaiFull) {
-                    $q->where('waktu_mulai', '<', $waktuSelesaiFull)
-                      ->where('waktu_selesai', '>', $waktuMulaiFull);
-                });
+                $query->where('waktu_mulai', '<', $waktuSelesaiFull)
+                    ->where('waktu_selesai', '>', $waktuMulaiFull);
             })->exists();
 
         if ($jadwalBentrok) {
