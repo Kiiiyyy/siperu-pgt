@@ -46,13 +46,13 @@
                         <!-- 🔥 TAMPILAN ULTRA-CLEAN MICRO PROGRESS TRACKER MAHASISWA -->
                         <td class="px-6 py-4 vertical-align-middle">
                             <div class="flex flex-col items-center justify-center w-full max-w-[150px] mx-auto space-y-2">
-                                
+
                                 @if($item->status_izin !== 'Ditolak' && !str_contains($item->status_izin, 'Ditolak'))
                                     <!-- 1. Sleek Line Tracker Graph -->
                                     <div class="flex items-center justify-between w-full relative px-1 h-3">
                                         <!-- Background Line Track -->
                                         <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 h-0.5 {{ $item->status_izin == 'Disetujui' ? 'bg-green-200' : ($item->status_izin == 'Disetujui Dosen' ? 'bg-purple-200' : 'bg-gray-200') }} z-0 transition-colors duration-300"></div>
-                                        
+
                                         <!-- Bulatan Node 1: Dosen Pembina -->
                                         <div class="w-3.5 h-3.5 rounded-full z-10 flex items-center justify-center text-[8px] transition-all {{ $item->status_izin == 'Pending' ? 'bg-blue-600 ring-4 ring-blue-100 text-white' : 'bg-green-600 text-white' }}">
                                             @if($item->status_izin != 'Pending')
@@ -67,7 +67,7 @@
                                             @endif
                                         </div>
                                     </div>
-                                    
+
                                     <!-- 2. Minimalist Single Status Text -->
                                     <div class="text-[10px] font-bold uppercase tracking-wider">
                                         @if($item->status_izin == 'Pending')
@@ -95,9 +95,9 @@
 
                         <td class="px-6 py-4">
                             <div class="flex items-center justify-center gap-1.5">
-                                
+
                                 <!-- 1. Tombol Detail (Sudah ada) -->
-                                <button type="button" 
+                                <button type="button"
                                     onclick="openDetailModal(this)"
                                     data-judul="{{ $item->judul_pengajuan }}"
                                     data-ruangan="🏢 {{ $item->room->nama_ruangan }}"
@@ -113,7 +113,7 @@
 
                                 @if($item->status_izin === 'Pending')
                                     <!-- 2. Tombol Edit (Biru Serasi) -->
-                                    <a href="{{ route('reservation.edit', $item->id) }}" 
+                                    <a href="{{ route('reservation.edit', $item->id) }}"
                                     class="text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white px-2.5 py-1.5 rounded-lg border border-blue-200 transition">
                                         Edit
                                     </a>
@@ -122,7 +122,7 @@
                                     <form action="{{ route('reservation.destroy', $item->id) }}" method="POST" onsubmit="return confirm('Yakin ingin membatalkan pengajuan ini?')">
                                         @csrf
                                         @method('DELETE')
-                                        <button type="submit" 
+                                        <button type="submit"
                                             class="text-[10px] font-bold uppercase tracking-wider bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-2.5 py-1.5 rounded-lg border border-red-200 transition">
                                             Hapus
                                         </button>
@@ -147,7 +147,7 @@
 <!-- ==================== 🔥 TAILWIND MODAL BOX: DETAIL PEMINJAMAN ULTRA CLEAN ==================== -->
 <div id="modal-detail-mhs" style="display: none;" class="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-200 animate-fadeIn">
     <div class="bg-white rounded-2xl border border-gray-100 shadow-2xl max-w-md w-full overflow-hidden transform scale-95 transition-transform duration-200">
-        
+
         <!-- Header Modal -->
         <div class="px-6 py-4 bg-gray-50 border-b border-gray-100 flex justify-between items-center">
             <div>
@@ -156,7 +156,7 @@
             </div>
             <button onclick="closeDetailModal()" class="text-gray-400 hover:text-gray-600 font-bold text-sm focus:outline-none">✕</button>
         </div>
-        
+
         <!-- Body Konten Detail -->
         <div class="p-6 space-y-4 text-xs text-gray-600">
             <!-- Agenda Judul -->
@@ -198,7 +198,7 @@
                 </a>
             </div>
         </div>
-        
+
         <!-- Footer Penutup -->
         <div class="px-6 py-3.5 bg-gray-50 border-t border-gray-100 flex justify-end">
             <button type="button" onclick="closeDetailModal()" class="px-4 py-1.5 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-[10px] uppercase rounded-lg shadow-sm transition">Tutup Detail</button>
@@ -210,7 +210,7 @@
 <script>
 function openDetailModal(button) {
     const modal = document.getElementById('modal-detail-mhs');
-    
+
     // Tarik seluruh data atribut dari button yang diklik
     const judul = button.getAttribute('data-judul');
     const ruangan = button.getAttribute('data-ruangan');

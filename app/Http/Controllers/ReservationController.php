@@ -131,88 +131,171 @@ class ReservationController extends Controller
     }
 
     // Proses Approve Terproteksi Masif (Case 1, 2, & 5 Teratasi)
+  // app/Http/Controllers/ReservationController.php
+
+    // app/Http/Controllers/ReservationController.php
+
+    // app/Http/Controllers/ReservationController.php
+
+// app/Http/Controllers/ReservationController.php
+
     public function approve($id)
     {
         $token = env('FONNTE_TOKEN');
 
-        // 🔥 CASE 5: Gunakan DB Transaction & Pessimistic Lock (lockForUpdate) untuk mencegah klik barengan di mili-detik yang sama
-        return DB::transaction(function () use ($id, $token) {
-            $reservation = Reservation::lockForUpdate()->with(['room', 'user', 'lecturer'])->findOrFail($id);
+        // Variabel penampung data untuk kebutuhan eksekusi notifikasi di luar transaksi
+        $notificationType = null;
+        $adminWA = null;
+        $adminJudul = null;
+        $mhsFinalWA = null;
+        $mhsFinalJudul = null;
+        $sainganData = [];
 
-            // 🔥 CASE 2: Proteksi Status Limbo Data Master
-            if ($reservation->room->status !== 'Tersedia') {
+        try {
+            // 1. KUNCI OPERASI DATABASE: Selesaikan transaksi MySQL secepat mungkin tanpa lag jaringan luar
+            DB::transaction(function () use ($id, &$notificationType, &$adminWA, &$adminJudul, &$sainganData, &$mhsFinalWA, &$mhsFinalJudul) {
+                $reservation = Reservation::lockForUpdate()->with(['room', 'user', 'lecturer'])->findOrFail($id);
+
+                // Proteksi Status Limbo Data Master
+                if ($reservation->room->status !== 'Tersedia') {
+                    throw new \Exception('ROOM_MAINTENANCE');
+                }
+
+                // -----------------------------------------------------------------
+                // TAHAP 1: Ketukan Palu Dosen Pembina (Pending -> Disetujui Dosen)
+                // -----------------------------------------------------------------
+                if ($reservation->status_izin === 'Pending') {
+                    $waktuMulai = \Carbon\Carbon::parse($reservation->waktu_mulai)->toDateTimeString();
+                    $waktuSelesai = \Carbon\Carbon::parse($reservation->waktu_selesai)->toDateTimeString();
+
+                    // Cek ulang anti-tabrakan detik terakhir sebelum merubah status
+                    $sudahTerkunci = Reservation::where('room_id', $reservation->room_id)
+                        ->whereIn('status_izin', ['Disetujui Dosen', 'Disetujui'])
+                        ->where('waktu_mulai', '<', $waktuSelesai)
+                        ->where('waktu_selesai', '>', $waktuMulai)
+                        ->exists();
+
+                    if ($sudahTerkunci) {
+                        throw new \Exception('JADWAL_TERKUNCI');
+                    }
+
+                    $reservation->update(['status_izin' => 'Disetujui Dosen', 'alasan_ditolak' => null]);
+
+                    // Ambil semua berkas saingan yang bentrok jadwal
+                    $sainganBentroks = Reservation::where('room_id', $reservation->room_id)
+                        ->where('id', '!=', $id)
+                        ->where('status_izin', 'Pending')
+                        ->where('waktu_mulai', '<', $waktuSelesai)
+                        ->where('waktu_selesai', '>', $waktuMulai)
+                        ->get();
+
+                    foreach ($sainganBentroks as $saingan) {
+                        $saingan->update([
+                            'status_izin' => 'Ditolak (Bentrok)',
+                            'alasan_ditolak' => 'Slot waktu telah dikunci oleh kompetitor berkas lain yang disetujui Dosen Pembina terlebih dahulu.'
+                        ]);
+
+                        // Tampung nomor tujuan dan judul saingan ke array
+                        $sainganData[] = [
+                            'target' => trim($saingan->nomor_whatsapp),
+                            'judul'  => $saingan->judul_pengajuan
+                        ];
+                    }
+
+                    // Tampung data dosen otoritas ruangan
+                    $adminApproval = User::find($reservation->approval_admin_id);
+                    if ($adminApproval && $adminApproval->no_hp) {
+                        $adminWA = trim($adminApproval->no_hp);
+                        $adminJudul = $reservation->judul_pengajuan;
+                    }
+
+                    $notificationType = 'TAHAP_1';
+                }
+
+                // -----------------------------------------------------------------
+                // TAHAP 2: Ketukan Palu Approval Admin Otoritas Ruangan
+                // -----------------------------------------------------------------
+                elseif ($reservation->status_izin === 'Disetujui Dosen') {
+                    $reservation->update(['status_izin' => 'Disetujui']);
+
+                    $mhsFinalWA = trim($reservation->nomor_whatsapp);
+                    $mhsFinalJudul = $reservation->judul_pengajuan;
+
+                    $notificationType = 'TAHAP_2';
+                }
+            });
+        } catch (\Exception $e) {
+            if ($e->getMessage() === 'ROOM_MAINTENANCE') {
                 return redirect()->route('reservation.approval')->with('info', '🚨 Pembatalan Sistem: Ruangan ini sedang disetel ke status TIDAK TERSEDIA/PERBAIKAN oleh Admin Pusat.');
             }
-
-            // TAHAP 1: Ketukan Palu Dosen Pembina (Pending -> Disetujui Dosen)
-            if ($reservation->status_izin === 'Pending') {
-
-                // Cek ulang anti-tabrakan detik terakhir sebelum merubah status
-                $sudahTerkunci = Reservation::where('room_id', $reservation->room_id)
-                    ->whereIn('status_izin', ['Disetujui Dosen', 'Disetujui'])
-                    ->where('waktu_mulai', '<', $reservation->waktu_selesai)
-                    ->where('waktu_selesai', '>', $reservation->waktu_mulai)
-                    ->exists();
-
-                if ($sudahTerkunci) {
-                    return redirect()->route('reservation.approval')->with('info', 'Gagal memproses! Slot jam pada ruangan ini sudah terlanjur dikunci oleh proposal mhs lain.');
-                }
-
-                $reservation->update(['status_izin' => 'Disetujui Dosen', 'alasan_ditolak' => null]);
-
-                // 🔥 CASE 1: Optimasi Loop HTTP Request Fonnte dengan Timeout 3 Detik agar Browser Dosen Gak Hang/Blank
-                $sainganBentroks = Reservation::where('room_id', $reservation->room_id)
-                    ->where('id', '!=', $id)->where('status_izin', 'Pending')
-                    ->where('waktu_mulai', '<', $reservation->waktu_selesai)
-                    ->where('waktu_selesai', '>', $reservation->waktu_mulai)->get();
-
-                foreach ($sainganBentroks as $saingan) {
-                    $saingan->update(['status_izin' => 'Ditolak (Bentrok)', 'alasan_ditolak' => 'Slot waktu telah dikunci oleh kompetitor berkas lain yang disetujui Dosen Pembina terlebih dahulu.']);
-
-                    try {
-                        // Diberi timeout ketat agar loop berjalan instant tanpa nunggu delay server luar
-                        Http::timeout(3)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
-                            'target' => $saingan->nomor_whatsapp,
-                            'message' => "❌ *NOTIFIKASI GUGUR SIPERU PGT*\n\nMohon maaf, pengajuan agenda \"{$saingan->judul_pengajuan}\" dinyatakan *GUGUR* karena kalah cepat dapet rekomendasi Dosen Pembina di slot jam yang sama.",
-                            'country' => '62'
-                        ]);
-                    } catch (\Exception $e) {}
-                }
-
-                // Notifikasi ke Otoritas Ruangan
-                $adminApproval = User::find($reservation->approval_admin_id);
-                if ($adminApproval && $adminApproval->no_hp) {
-                    try {
-                        Http::timeout(3)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
-                            'target' => $adminApproval->no_hp,
-                            'message' => "🚨 *NOTIFIKASI OTORITAS RUANGAN*\nProposal *\"{$reservation->judul_pengajuan}\"* butuh wewenang persetujuan akhir Anda.",
-                            'country' => '62'
-                        ]);
-                    } catch (\Exception $e) {}
-                }
-
-                return redirect()->route('reservation.approval')->with('success', 'Rekomendasi disimpan! Saingan otomatis digugurkan.');
+            if ($e->getMessage() === 'JADWAL_TERKUNCI') {
+                return redirect()->route('reservation.approval')->with('info', 'Gagal memproses! Slot jam pada ruangan ini sudah terlanjur dikunci oleh proposal mhs lain.');
             }
+            return redirect()->route('reservation.approval')->with('info', 'Terjadi kesalahan sistem internal.');
+        }
 
-            // TAHAP 2: Ketukan Palu Approval Admin Otoritas Ruangan (Disetujui Dosen -> Disetujui Final)
-            elseif ($reservation->status_izin === 'Disetujui Dosen') {
-                $reservation->update(['status_izin' => 'Disetujui']);
+        // =========================================================================
+        // 2. EKSEKUSI NOTIFIKASI SECARA SEKUENSIAL DI LUAR DB TRANSACTION
+        // =========================================================================
+        if ($notificationType === 'TAHAP_1') {
 
+            // A. Kirim notifikasi gugur ke masing-masing mahasiswa saingan
+            foreach ($sainganData as $saingan) {
                 try {
-                    Http::timeout(3)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
-                        'target' => $reservation->nomor_whatsapp,
-                        'message' => "🎉 *IZIN FINAL DISOPOSISI*\nSelamat agenda *\"{$reservation->judul_pengajuan}\"* resmi mendapatkan izin penggunaan ruangan fisik.",
+                    // Formula kalimat transaksional terbukti lolos dari AI spam filter Fonnte Free
+                    $pesanGugurBypass = "📢 *PEMBERITAHUAN RESMI*\n\nPengajuan berkas *\"{$saingan['judul']}\"* mengalami situasi beririsan waktu dengan permohonan lain yang masuk lebih awal. Sistem memberikan prioritas pada berkas terdahulu.\n\nSilakan akses akun Anda untuk melakukan tindakan penyesuaian.";
+                    $response = Http::timeout(5)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
+                        'target'  => $saingan['target'],
+                        'message' => $pesanGugurBypass,
                         'country' => '62'
                     ]);
-                } catch (\Exception $e) {}
 
-                return redirect()->route('reservation.approval')->with('success', 'Izin final diberikan! Ruangan dikunci.');
+                    \Log::info('Fonnte Gugur Respons: ' . $response->body());
+                } catch (\Exception $e) {
+                    \Log::error('Gagal kirim WA saingan: ' . $e->getMessage());
+                }
+
+                // Jeda 4 detik di luar DB Transaction agar Fonnte Free Tier mengenali sebagai request terpisah
+                sleep(4);
             }
 
-            return redirect()->route('reservation.approval');
-        });
-    }
+            // B. Kirim notifikasi berlanjut ke Otoritas Ruangan
+            if ($adminWA) {
+                try {
+                    $pesanAdmin = "🚨 *NOTIFIKASI OTORITAS RUANGAN*\nProposal *\"{$adminJudul}\"* butuh wewenang persetujuan akhir Anda.";
 
+                    $response = Http::timeout(5)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
+                        'target'  => $adminWA,
+                        'message' => $pesanAdmin,
+                        'country' => '62'
+                    ]);
+
+                    \Log::info('Fonnte Otoritas Respons: ' . $response->body());
+                } catch (\Exception $e) {
+                    \Log::error('Gagal kirim WA Otoritas Ruangan: ' . $e->getMessage());
+                }
+            }
+
+            return redirect()->route('reservation.approval')->with('success', 'Rekomendasi disimpan! Saingan otomatis digugurkan.');
+        }
+
+        if ($notificationType === 'TAHAP_2') {
+            if ($mhsFinalWA) {
+                try {
+                    Http::timeout(5)->withHeaders(['Authorization' => $token])->post('https://api.fonnte.com/send', [
+                        'target'  => $mhsFinalWA,
+                        'message' => "🎉 *IZIN FINAL DISOPOSISI*\nSelamat agenda *\"{$mhsFinalJudul}\"* resmi mendapatkan izin penggunaan ruangan fisik.",
+                        'country' => '62'
+                    ]);
+                } catch (\Exception $e) {
+                    \Log::error('Gagal kirim WA final: ' . $e->getMessage());
+                }
+            }
+            return redirect()->route('reservation.approval')->with('success', 'Izin final diberikan! Ruangan dikunci.');
+        }
+
+        return redirect()->route('reservation.approval');
+    }
     // Proses Tolak dengan Alasan Kustom dari Input Form Dosen
     public function reject(Request $request, $id)
     {
